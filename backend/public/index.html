@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Check-in</title>
+</head>
+<body>
+  <p id="msg">Waiting for the check-in window…</p>
+  <a id="btn" href="/checkin" style="display:none">I'm alive ✅</a>
+
+  <script>
+    async function poll() {
+      try {
+        const res = await fetch('/status', { cache: 'no-store' });
+        const { active } = await res.json();
+        if (active) {
+          document.getElementById('msg').textContent = 'Check-in is open. Tap to confirm.';
+          document.getElementById('btn').style.display = 'inline-block';
+          return; // stop polling
+        }
+      } catch (e) {}
+      setTimeout(poll, 5000);
+    }
+    poll();
+  </script>
+</body>
+</html>

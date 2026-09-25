@@ -1,38 +1,83 @@
-const app = require('./src/app.js');
-const crypto = require('node:crypto')
+const express = require('express');
+const app = express();
+const crypto = require('crypto');
 const cron = require('node-cron');
-const axios = require('axios');
+const nodemailer = require('nodemailer');
+const path = require('path');
+
+const TIMEZONE = 'Asia/Kolkata';
 
 
-let currentToken = null;
-let triggerToken = null;
-let windowOpen = false;
 
-cron.schedule('30 8 * * *', () => {
-    currentToken = crypto.randomBytes(16).toString('hex'); // naya secure random token roz
-    windowOpen = true;
-    console.log('Checkin token:', currentToken);
+let activeToken = null;
+let switchTimer = null;
+
+const triggerDeadManSwitch = () => {
+    const passWord = process.env.PASS;
+
+    const transporter = nodemailer.createTransport({
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false,
+        auth: {
+            user: 'mansuriatif78@gmail.com',
+            pass: passWord,
+        }
+    });
+
+    const mailOptions = {
+        from: 'mansuriatif78@gmail.com',
+        to: 'mansuriatif80@gmail.com',
+        subject: 'URGENT: Dead Man\'s Switch Triggered',
+        text: 'NO RESPONSE TO DEAD MAN\'S SWITCH. CHECK ON HIM ASAP.',
+    };
+
+    transporter.sendMail(mailOptions, (error, info) => {
+        if (error) {
+            return console.error('Error sending email:', error);
+        }
+        console.log('Emergency email sent successfully:', info.messageId);
+    });
+};
+
+
+cron.schedule('50 11 * * *', () => {
+    activeToken = crypto.randomBytes(16).toString('hex');
+    console.log(`[CRON] New check-in token generated: ${activeToken}`);
+
+
+    if (switchTimer) clearTimeout(switchTimer);
+
+    switchTimer = setTimeout(() => {
+        console.log('Check-in window missed! Triggering emergency protocol...');
+        triggerDeadManSwitch();
+    }, 24 * 60 * 60 * 1000);
+}, {
+    timezone: TIMEZONE
 });
 
-cron.schedule('30 9 * * *', () => {
-    if (windowOpen) {
-        // matlab button press nahi hua, trigger karo
-        triggerToken = crypto.randomBytes(16).toString('hex');
-        sendEmail(); // tera nodemailer wala function
-    }
-    windowOpen = false;
-    currentToken = null;
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/', (req, res) => {
+    res.json({ active: !!activeToken });
 });
 
-app.get('/checkin/:token', (req, res) => {
-    if (req.params.token === currentToken && windowOpen) {
-        windowOpen = false; // "button pressed" — window band
-        currentToken = null;
-        return res.redirect('/');
+
+app.get('/checkin', (req, res) => {
+    const { token } = req.params;
+
+    if (token === activeToken) {
+        if (switchTimer) {
+            clearTimeout(switchTimer);
+            switchTimer = null;
+        }
+        activeToken = null;
+        return res.send('Check-in successful. Dead Man\'s Switch disarmed for today.');
     }
-    res.status(404).send('Not found');
+
+    res.status(400).send('Invalid or expired check-in token.');
 });
 
 app.listen(3001, () => {
-  console.log("DMS is listning at port 3001")
-})
+    console.log('Server running on port 3001 with LiveReload enabled');
+});
